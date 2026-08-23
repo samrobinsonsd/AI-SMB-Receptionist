@@ -148,6 +148,22 @@ async def media_stream(websocket: WebSocket):
             async for message in openai_websocket:
                 data = json.loads(message)
                 event_type = data.get("type")
+                
+                # If the caller starts speaking while AI audio is still being played,
+                # clear Twilio's outbound media buffer so the receptionist stops
+                # talking immediately.
+                if event_type == "input_audio_buffer.speech_started":
+                    if stream_sid:
+                        clear_event = {
+                            "event": "clear",
+                            "streamSid": stream_sid,
+                        }
+
+                        await websocket.send_text(
+                            json.dumps(clear_event)
+                        )
+
+                        print("Caller interruption detected. Cleared Twilio audio buffer.")
 
                 # OpenAI sends generated speech in small base64-encoded audio chunks.
                 # Since the session output format is PCMU, the audio can be forwarded
