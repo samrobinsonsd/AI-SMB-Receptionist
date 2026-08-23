@@ -118,6 +118,10 @@ async def media_stream(websocket: WebSocket):
     # Accept the incoming WebSocket connection.
     # FastAPI requires this before messages can be received or sent.
     await websocket.accept()
+    
+    # Twilio assigns a unique Stream SID to each Media Stream.
+    # We need this identifier when sending generated audio back to Twilio.
+    stream_sid = None
 
     print("Twilio Media Stream connected.")
     
@@ -142,13 +146,51 @@ async def media_stream(websocket: WebSocket):
         try:
             async for message in openai_websocket:
                 data = json.loads(message)
-
                 event_type = data.get("type")
 
-                print(f"OpenAI event: {event_type}")
+                # OpenAI sends generated speech in small base64-encoded audio chunks.
+                # Since the session output format is PCMU, the audio can be forwarded
+                # directly to Twilio without transcoding.
+                if event_type == "response.output_audio.delta":
+                    audio_delta = data.get("delta")
+
+                    # Twilio requires the Stream SID so it knows which active
+                    # phone call should receive this audio.
+                    if audio_delta and stream_sid:
+                        twilio_audio_event = {
+                            "event": "media",
+                            "streamSid": stream_sid,
+                            "media": {
+                                "payload": audio_delta,
+                            },
+                        }
+
+                        # Send the generated audio back over the existing Twilio
+                        # WebSocket connection.
+                        await websocket.send_text(
+                            json.dumps(twilio_audio_event)
+                        )
+
+                # Avoid logging every tiny audio and transcript chunk.
+                # These events arrive many times per second.
+                noisy_events = {
+                    "response.output_audio.delta",
+                    "response.output_audio_transcript.delta",
+                }
+
+                if event_type not in noisy_events:
+                    print(f"OpenAI event: {event_type}")
 
         except websockets.ConnectionClosed:
             print("OpenAI Realtime connection closed.")
+
+        except Exception as exc:
+            # Background asyncio tasks can otherwise fail quietly,
+            # so print unexpected listener errors for debugging.
+            print(
+                f"OpenAI listener error: "
+                f"{type(exc).__name__}: {exc}"
+            )
     
     # asyncio.create_task() starts the OpenAI listener without blocking
     # the Twilio receive loop below.
@@ -183,12 +225,31 @@ async def media_stream(websocket: WebSocket):
                 print(f"Twilio Call SID: {call_sid}")
 
             elif event_type == "media":
-                # Caller audio is arriving here.
+                # Twilio sends the caller's audio inside media.payload.
                 #
-                # We are intentionally ignoring the audio payload for now.
-                # In the next phase, this audio will be forwarded to
-                # the OpenAI Realtime API.
-                pass
+                # The payload is already:
+                # - G.711 μ-law / PCMU
+                # - 8 kHz
+                # - base64 encoded
+                #
+                # OpenAI Realtime is configured to accept the same PCMU
+                # format, so we can forward the payload directly without
+                # decoding or transcoding the audio in Python.
+                media_data = data.get("media", {})
+                audio_payload = media_data.get("payload")
+
+                if audio_payload:
+                    # OpenAI's input_audio_buffer.append event adds this
+                    # chunk of caller audio to the active Realtime session.
+                    openai_audio_event = {
+                        "type": "input_audio_buffer.append",
+                        "audio": audio_payload,
+                    }
+
+                    # Send the caller's audio chunk to OpenAI.
+                    await openai_websocket.send(
+                        json.dumps(openai_audio_event)
+                    )
 
             elif event_type == "stop":
                 # Twilio sends this when the Media Stream ends normally.
