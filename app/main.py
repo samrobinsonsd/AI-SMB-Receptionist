@@ -95,6 +95,27 @@ async def incoming_call():
     )
 
 
+async def handle_take_message(arguments):
+    """
+    Handle structured caller messages submitted by the AI.
+
+    For this first version, messages are only written to the console.
+    Later this function can store them in a database, send an email,
+    create a CRM record, or notify staff by SMS.
+    """
+
+    print("\n--- NEW REEFWISE MESSAGE ---")
+    print(f"Name: {arguments.get('name')}")
+    print(f"Phone: {arguments.get('phone')}")
+    print(f"Reason: {arguments.get('reason')}")
+    print(f"Notes: {arguments.get('notes', '')}")
+    print(
+        f"Callback requested: "
+        f"{arguments.get('callback_requested')}"
+    )
+    print("----------------------------\n")
+    
+    
 @app.websocket("/media-stream")
 async def media_stream(websocket: WebSocket):
     """
@@ -148,6 +169,54 @@ async def media_stream(websocket: WebSocket):
             async for message in openai_websocket:
                 data = json.loads(message)
                 event_type = data.get("type")
+                
+                # OpenAI emits this event when a function/tool call has
+                # finished and all arguments have been generated.
+                if event_type == "response.function_call_arguments.done":
+                    tool_name = data.get("name")
+                    call_id = data.get("call_id")
+                    arguments_json = data.get("arguments", "{}")
+
+                    # Convert the tool arguments from JSON text into
+                    # a normal Python dictionary.
+                    arguments = json.loads(arguments_json)
+
+                    if tool_name == "take_message":
+                        await handle_take_message(arguments)
+
+                        # Tell OpenAI that Python successfully executed
+                        # the requested tool.
+                        tool_result = {
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "function_call_output",
+                                "call_id": call_id,
+                                "output": json.dumps(
+                                    {
+                                        "success": True,
+                                        "message": (
+                                            "The message was captured "
+                                            "for Reefwise staff."
+                                        ),
+                                    }
+                                ),
+                            },
+                        }
+
+                        await openai_websocket.send(
+                            json.dumps(tool_result)
+                        )
+
+                        # After a tool finishes, explicitly ask OpenAI
+                        # to continue the conversation and tell the
+                        # caller the result.
+                        await openai_websocket.send(
+                            json.dumps(
+                                {
+                                    "type": "response.create",
+                                }
+                            )
+                        )
                 
                 # If the caller starts speaking while AI audio is still being played,
                 # clear Twilio's outbound media buffer so the receptionist stops
