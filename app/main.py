@@ -16,9 +16,13 @@ from app.openai_realtime import (
 )
 
 from app.database import (
+    add_call_usage,
+    end_call,
+    get_calls,
     get_messages,
     initialize_database,
     save_message,
+    start_call,
     update_message_status,
 )
 
@@ -82,6 +86,88 @@ async def list_messages():
     return {
         "count": len(messages),
         "messages": messages,
+    }
+
+
+@app.get("/calls")
+async def list_calls():
+    """
+    Return basic call telemetry.
+
+    This development endpoint lets us verify that calls are
+    being persisted with timestamps and durations.
+    """
+
+    calls = get_calls()
+
+    return {
+        "count": len(calls),
+        "calls": calls,
+    }
+
+
+@app.get("/stats")
+async def get_stats():
+    """
+    Return high-level receptionist usage and cost statistics.
+
+    Calls without OpenAI usage data are excluded from cost averages
+    because they were recorded before AI usage tracking was enabled.
+    """
+
+    calls = get_calls()
+
+    # Calls that contain OpenAI usage telemetry.
+    measured_calls = [
+        call for call in calls
+        if (
+            call["input_tokens"] > 0
+            or call["output_tokens"] > 0
+        )
+    ]
+
+    total_seconds = sum(
+        call["duration_seconds"] or 0
+        for call in measured_calls
+    )
+
+    total_cost = sum(
+        call["estimated_total_cost_usd"]
+        for call in measured_calls
+    )
+
+    call_count = len(measured_calls)
+
+    average_cost = (
+        total_cost / call_count
+        if call_count
+        else 0
+    )
+
+    average_duration = (
+        total_seconds / call_count
+        if call_count
+        else 0
+    )
+
+    return {
+        "calls": call_count,
+        "minutes": round(
+            total_seconds / 60,
+            1,
+        ),
+        "total_cost_usd": round(
+            total_cost,
+            4,
+        ),
+        "average_cost_usd": round(
+            average_cost,
+            4,
+        ),
+        "average_duration_seconds": round(
+            average_duration,
+        ),
+        "daily_budget_usd": 5.00,
     }
 
 
@@ -290,6 +376,62 @@ async def media_stream(websocket: WebSocket):
                 data = json.loads(message)
                 event_type = data.get("type")
                 
+                # Every completed OpenAI response includes usage data.
+                #
+                # A phone call usually contains multiple responses, so
+                # each response's usage is added to the current call.
+                if event_type == "response.done" and call_sid:
+                    response_data = data.get("response", {})
+                    usage = response_data.get("usage") or {}
+
+                    input_details = (
+                        usage.get("input_token_details")
+                        or usage.get("input_tokens_details")
+                        or {}
+                    )
+
+                    output_details = (
+                        usage.get("output_token_details")
+                        or usage.get("output_tokens_details")
+                        or {}
+                    )
+
+                    input_tokens = usage.get(
+                        "input_tokens",
+                        0,
+                    )
+
+                    output_tokens = usage.get(
+                        "output_tokens",
+                        0,
+                    )
+
+                    input_audio_tokens = input_details.get(
+                        "audio_tokens",
+                        0,
+                    )
+
+                    output_audio_tokens = output_details.get(
+                        "audio_tokens",
+                        0,
+                    )
+
+                    add_call_usage(
+                        call_sid=call_sid,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        input_audio_tokens=input_audio_tokens,
+                        output_audio_tokens=output_audio_tokens,
+                    )
+
+                    print(
+                        "OpenAI usage: "
+                        f"{input_tokens} input tokens, "
+                        f"{output_tokens} output tokens, "
+                        f"{input_audio_tokens} input audio tokens, "
+                        f"{output_audio_tokens} output audio tokens."
+                    )                
+                
                 # OpenAI emits this event when a function/tool call has
                 # finished and all arguments have been generated.
                 if event_type == "response.function_call_arguments.done":
@@ -458,6 +600,13 @@ async def media_stream(websocket: WebSocket):
                 print(f"Media Stream started: {stream_sid}")
                 print(f"Twilio Call SID: {call_sid}")
                 
+                # Persist the call as soon as Twilio provides its identifiers.
+                # This starts our usage and cost-tracking record.
+                start_call(
+                    call_sid=call_sid,
+                    stream_sid=stream_sid,
+                )
+                
                 # The Twilio Media Stream is now fully established and we have
                 # its Stream SID. It is safe for OpenAI to generate audio because
                 # we now know where to send that audio.
@@ -493,6 +642,13 @@ async def media_stream(websocket: WebSocket):
             elif event_type == "stop":
                 # Twilio sends this when the Media Stream ends normally.
                 print("Twilio Media Stream stopped.")
+                
+                # Complete the usage record for this call.
+                if call_sid:
+                    end_call(
+                        call_sid=call_sid,
+                        outcome="completed",
+                    )
                 break
 
     except WebSocketDisconnect:

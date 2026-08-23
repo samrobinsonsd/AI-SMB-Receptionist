@@ -107,6 +107,63 @@
             color: #aaa;
             font-size: 14px;
         }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 18px;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .budget-section {
+            margin-bottom: 30px;
+        }
+
+        .budget-header {
+            display: flex;
+            justify-content: space-between;
+            color: #aaa;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .budget-bar {
+            height: 8px;
+            background: #292929;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .budget-progress {
+            height: 100%;
+            width: 0%;
+            background: #ddd;
+            transition: width 0.3s ease;
+        }
+
+        @media (max-width: 700px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
     </style>
 </head>
 
@@ -120,6 +177,43 @@
         AI Receptionist Caller Messages
     </div>
 
+<div class="stats-grid">
+
+    <div class="stat-card">
+        <div class="stat-label">Calls</div>
+        <div class="stat-value" id="stat-calls">0</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Minutes</div>
+        <div class="stat-value" id="stat-minutes">0</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Total Cost</div>
+        <div class="stat-value" id="stat-cost">$0.00</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Avg Cost / Call</div>
+        <div class="stat-value" id="stat-average">$0.00</div>
+    </div>
+
+</div>
+
+<div class="budget-section">
+    <div class="budget-header">
+        <span>Daily Cost Target</span>
+        <span id="budget-text">$0.00 / $5.00</span>
+    </div>
+
+    <div class="budget-bar">
+        <div
+            class="budget-progress"
+            id="budget-progress">
+        </div>
+    </div>
+</div>
     <div class="filters">
         <button onclick="setFilter('all')">All</button>
         <button onclick="setFilter('new')">New</button>
@@ -284,6 +378,44 @@
 
     // Load the inbox when the page opens.
     loadMessages();
+    loadStats();
+
+
+// Load call usage and cost telemetry from FastAPI.
+async function loadStats() {
+    const response = await fetch("/stats");
+    const stats = await response.json();
+
+    document.getElementById("stat-calls").textContent =
+        stats.calls;
+
+    document.getElementById("stat-minutes").textContent =
+        stats.minutes;
+
+    document.getElementById("stat-cost").textContent =
+        `$${stats.total_cost_usd.toFixed(2)}`;
+
+    document.getElementById("stat-average").textContent =
+        `$${stats.average_cost_usd.toFixed(2)}`;
+
+    document.getElementById("budget-text").textContent =
+        `$${stats.total_cost_usd.toFixed(2)} / ` +
+        `$${stats.daily_budget_usd.toFixed(2)}`;
+
+    // Convert current spending into a percentage of
+    // the configured daily budget.
+    const percentage = Math.min(
+        (
+            stats.total_cost_usd
+            / stats.daily_budget_usd
+        ) * 100,
+        100
+    );
+
+    document.getElementById(
+        "budget-progress"
+    ).style.width = `${percentage}%`;
+}
 </script>
 
 </body>
