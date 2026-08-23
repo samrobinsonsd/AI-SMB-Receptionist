@@ -22,6 +22,8 @@ from app.database import (
     update_message_status,
 )
 
+from app.call_control import transfer_call_to_staff
+
 # Load environment variables from .env.
 load_dotenv()
 
@@ -256,9 +258,12 @@ async def media_stream(websocket: WebSocket):
     # FastAPI requires this before messages can be received or sent.
     await websocket.accept()
     
-    # Twilio assigns a unique Stream SID to each Media Stream.
-    # We need this identifier when sending generated audio back to Twilio.
+    # Twilio identifiers for the currently active call.
+    #
+    # stream_sid identifies the Media Stream.
+    # call_sid identifies the actual Twilio phone call.
     stream_sid = None
+    call_sid = None
 
     print("Twilio Media Stream connected.")
     
@@ -332,7 +337,35 @@ async def media_stream(websocket: WebSocket):
                                 }
                             )
                         )
-                
+
+                    elif tool_name == "transfer_to_staff":
+                        # The AI has confirmed that the caller wants live staff
+                        # assistance and has requested a transfer.
+                        reason = arguments.get(
+                            "reason",
+                            "No transfer reason provided.",
+                        )
+
+                        print("\n--- LIVE CALL TRANSFER ---")
+                        print(f"Call SID: {call_sid}")
+                        print(f"Reason: {reason}")
+                        print("--------------------------\n")
+
+                        if not call_sid:
+                            raise RuntimeError(
+                                "Cannot transfer call because Call SID is unavailable."
+                            )
+
+                        # Updating the active Twilio call replaces the current
+                        # <Connect><Stream> AI session with <Dial> instructions.
+                        transfer_call_to_staff(call_sid)
+
+                        # We intentionally do not send response.create here.
+                        #
+                        # Twilio is taking control of the call and leaving the
+                        # AI Media Stream, so the normal Realtime conversation
+                        # should not continue after this point.
+
                 # If the caller starts speaking while AI audio is still being played,
                 # clear Twilio's outbound media buffer so the receptionist stops
                 # talking immediately.

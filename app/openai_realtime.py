@@ -170,6 +170,13 @@ async def configure_realtime_session(openai_websocket):
                 "number, and reason for calling.\n"
                 "- Confirm important details before submitting the message.\n"
                 "- Use the take_message tool only after you have enough information."
+                "- If the caller explicitly asks to speak with a person, offer a live transfer.\n"
+                "- Use transfer_to_staff only after confirming the caller wants to be transferred.\n"
+                "- Do not claim the transfer succeeded until the transfer tool has been executed.\n"
+                "- Before using transfer_to_staff, tell the caller you are connecting them "
+                "with a member of the team.\n"
+                "- After saying that, immediately use transfer_to_staff.\n"
+                "- Do not continue speaking after requesting the transfer.\n"
             ),
             
             "tools": [
@@ -216,7 +223,30 @@ async def configure_realtime_session(openai_websocket):
                             "callback_requested",
                         ],
                     },
-                }
+                },
+                {
+                    "type": "function",
+                    "name": "transfer_to_staff",
+                    "description": (
+                        "Transfer the active caller to a Reefwise staff member "
+                        "when the caller asks to speak with someone or when live "
+                        "staff assistance is appropriate."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "reason": {
+                                "type": "string",
+                                "description": (
+                                    "Brief reason why the caller is being transferred."
+                                ),
+                            },
+                        },
+                        "required": [
+                            "reason",
+                        ],
+                    },
+                },
             ],
         },
     }
