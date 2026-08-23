@@ -133,3 +133,30 @@ async def configure_realtime_session(openai_websocket):
     )
 
     print("OpenAI Realtime session configuration sent.")
+    
+
+async def start_receptionist_greeting(openai_websocket):
+    """
+    Ask OpenAI to generate the first response of the call.
+
+    Without this event, the Realtime session waits for caller speech
+    before generating a response. A receptionist should answer first,
+    so we explicitly request an opening greeting.
+    """
+
+    greeting_event = {
+        "type": "response.create",
+        "response": {
+            "instructions": (
+                "Greet the caller as a professional receptionist. "
+                "Say: Thank you for calling Reefwise, your aquatic solution provider. "
+                "How can I help you today?"
+            ),
+        },
+    }
+
+    await openai_websocket.send(
+        json.dumps(greeting_event)
+    )
+
+    print("Receptionist greeting requested.")

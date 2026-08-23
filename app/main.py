@@ -10,6 +10,7 @@ from twilio.twiml.voice_response import VoiceResponse
 from app.openai_realtime import (
     connect_to_openai,
     configure_realtime_session,
+    start_receptionist_greeting,
 )
 
 
@@ -223,6 +224,11 @@ async def media_stream(websocket: WebSocket):
 
                 print(f"Media Stream started: {stream_sid}")
                 print(f"Twilio Call SID: {call_sid}")
+                
+                # The Twilio Media Stream is now fully established and we have
+                # its Stream SID. It is safe for OpenAI to generate audio because
+                # we now know where to send that audio.
+                await start_receptionist_greeting(openai_websocket)
 
             elif event_type == "media":
                 # Twilio sends the caller's audio inside media.payload.
