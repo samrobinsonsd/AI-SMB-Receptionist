@@ -5,6 +5,8 @@ import os
 import websockets
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from pathlib import Path
 from twilio.twiml.voice_response import VoiceResponse
 
 from app.openai_realtime import (
@@ -45,6 +47,10 @@ app = FastAPI(title="AI SMB Receptionist")
 initialize_database()
 
 
+# Path to the HTML inbox template.
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
+
 # Basic health-check endpoint.
 #
 # This gives us a quick way to confirm that the Python application is running
@@ -76,6 +82,21 @@ async def list_messages():
         "messages": messages,
     }
 
+
+@app.get("/inbox", response_class=HTMLResponse)
+async def inbox():
+    """
+    Serve the simple receptionist message inbox.
+
+    The page loads caller messages from the /messages API and uses
+    the existing PATCH endpoint to update message status.
+    """
+
+    inbox_path = TEMPLATES_DIR / "inbox.html"
+
+    return inbox_path.read_text(
+        encoding="utf-8"
+    )
 
 @app.patch("/messages/{message_id}/status")
 async def change_message_status(
