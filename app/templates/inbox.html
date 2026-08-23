@@ -91,6 +91,22 @@
         .empty {
             color: #999;
         }
+
+        .filters {
+            margin-bottom: 20px;
+        }
+
+        .filters button {
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+        }
+
+        .counts {
+            margin-bottom: 25px;
+            color: #aaa;
+            font-size: 14px;
+        }
     </style>
 </head>
 
@@ -104,6 +120,15 @@
         AI Receptionist Caller Messages
     </div>
 
+    <div class="filters">
+        <button onclick="setFilter('all')">All</button>
+        <button onclick="setFilter('new')">New</button>
+        <button onclick="setFilter('contacted')">Contacted</button>
+        <button onclick="setFilter('closed')">Closed</button>
+    </div>
+
+    <div id="counts" class="counts"></div>
+
     <div id="messages">
         Loading messages...
     </div>
@@ -111,26 +136,96 @@
 </div>
 
 <script>
-    // Load all stored receptionist messages from the FastAPI backend.
+    // Store the currently selected inbox filter.
+    let currentFilter = "all";
+
+
+    // Change the active filter and reload the inbox.
+    function setFilter(status) {
+        currentFilter = status;
+        loadMessages();
+    }
+
+
+    // Load all stored receptionist messages from FastAPI.
     async function loadMessages() {
         const response = await fetch("/messages");
         const data = await response.json();
 
         const container = document.getElementById("messages");
+        const countsContainer = document.getElementById("counts");
 
-        if (data.messages.length === 0) {
+        // Count messages by workflow status.
+        const counts = {
+            new: 0,
+            contacted: 0,
+            closed: 0,
+        };
+
+        for (const message of data.messages) {
+            if (counts[message.status] !== undefined) {
+                counts[message.status]++;
+            }
+        }
+
+        countsContainer.textContent =
+            `New: ${counts.new} | ` +
+            `Contacted: ${counts.contacted} | ` +
+            `Closed: ${counts.closed}`;
+
+        // Apply the selected inbox filter.
+        const filteredMessages = data.messages.filter(
+            message =>
+                currentFilter === "all" ||
+                message.status === currentFilter
+        );
+
+        if (filteredMessages.length === 0) {
             container.innerHTML =
-                '<div class="empty">No caller messages.</div>';
+                '<div class="empty">No messages in this view.</div>';
 
             return;
         }
 
         container.innerHTML = "";
 
-        for (const message of data.messages) {
+        for (const message of filteredMessages) {
             const card = document.createElement("div");
 
             card.className = "message-card";
+
+            // Only show workflow actions that make sense
+            // for the message's current status.
+            let actionButtons = "";
+
+            if (message.status === "new") {
+                actionButtons = `
+                    <button onclick="changeStatus(
+                        ${message.id},
+                        'contacted'
+                    )">
+                        Mark Contacted
+                    </button>
+
+                    <button onclick="changeStatus(
+                        ${message.id},
+                        'closed'
+                    )">
+                        Close
+                    </button>
+                `;
+            }
+
+            else if (message.status === "contacted") {
+                actionButtons = `
+                    <button onclick="changeStatus(
+                        ${message.id},
+                        'closed'
+                    )">
+                        Close
+                    </button>
+                `;
+            }
 
             card.innerHTML = `
                 <div class="message-header">
@@ -157,19 +252,7 @@
                 </div>
 
                 <div class="buttons">
-                    <button onclick="changeStatus(
-                        ${message.id},
-                        'contacted'
-                    )">
-                        Mark Contacted
-                    </button>
-
-                    <button onclick="changeStatus(
-                        ${message.id},
-                        'closed'
-                    )">
-                        Close
-                    </button>
+                    ${actionButtons}
                 </div>
             `;
 
@@ -178,22 +261,28 @@
     }
 
 
-    // Update message workflow status using the PATCH endpoint
-    // already exposed by FastAPI.
+    // Update message workflow status through FastAPI.
     async function changeStatus(messageId, status) {
-        await fetch(
+        const response = await fetch(
             `/messages/${messageId}/status?status=${status}`,
             {
                 method: "PATCH"
             }
         );
 
-        // Reload the inbox so the updated status is visible immediately.
+        if (!response.ok) {
+            console.error(
+                "Failed to update message status."
+            );
+
+            return;
+        }
+
         await loadMessages();
     }
 
 
-    // Load messages as soon as the page opens.
+    // Load the inbox when the page opens.
     loadMessages();
 </script>
 
