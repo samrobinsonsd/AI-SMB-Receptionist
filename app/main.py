@@ -1,35 +1,32 @@
-# Standard library imports used to read environment variables
-# and decode incoming JSON messages from Twilio.
-import os
+import asyncio
 import json
+import os
 
-# FastAPI provides the web application, HTTP responses,
-# and WebSocket support.
-from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
-
-# python-dotenv loads variables from a local .env file.
+import websockets
 from dotenv import load_dotenv
-
-# Twilio's VoiceResponse class generates TwiML.
+from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse
 
+from app.openai_realtime import connect_to_openai
 
-# Load environment variables from the project's .env file, if one exists.
+
+# Load environment variables from .env.
 load_dotenv()
 
 
-# PUBLIC_URL will eventually be the public HTTPS address that Twilio can reach.
+# Public HTTPS address used by Twilio to reach this application.
 #
-# During local development, FastAPI runs on localhost, but Twilio cannot
-# connect directly to localhost on our computer. Later we will expose the
-# application through a secure public tunnel.
+# Example:
+# https://random-name.trycloudflare.com
+#
+# We keep this in main.py because it is part of the Twilio/FastAPI
+# configuration, not the OpenAI connection configuration.
 PUBLIC_URL = os.getenv("PUBLIC_URL")
 
 
-# Create the FastAPI application.
-# Uvicorn loads this object when we run:
-#
-# uvicorn app.main:app --reload
+# FastAPI handles:
+# 1. Twilio's HTTP webhook for incoming calls.
+# 2. Twilio's WebSocket connection for live Media Streams.
 app = FastAPI(title="AI SMB Receptionist")
 
 
@@ -94,7 +91,6 @@ async def incoming_call():
     )
 
 
-
 @app.websocket("/media-stream")
 async def media_stream(websocket: WebSocket):
     """
@@ -121,6 +117,37 @@ async def media_stream(websocket: WebSocket):
     await websocket.accept()
 
     print("Twilio Media Stream connected.")
+    
+    # Establish a second WebSocket connection from our Python server
+    # to OpenAI Realtime.
+    #
+    # At this point the application has two independent persistent
+    # connections:
+    #
+    # Twilio <-> Python <-> OpenAI
+    openai_websocket = await connect_to_openai()
+    
+    # OpenAI sends events over the WebSocket as JSON messages.
+    #
+    # This background task listens for those events while the main
+    # function continues listening to Twilio.
+    async def receive_openai_events():
+        try:
+            async for message in openai_websocket:
+                data = json.loads(message)
+
+                event_type = data.get("type")
+
+                print(f"OpenAI event: {event_type}")
+
+        except websockets.ConnectionClosed:
+            print("OpenAI Realtime connection closed.")
+    
+    # asyncio.create_task() starts the OpenAI listener without blocking
+    # the Twilio receive loop below.
+    openai_listener = asyncio.create_task(
+        receive_openai_events()
+    )
 
     try:
         # Keep listening for messages until Twilio closes the stream.
@@ -165,3 +192,12 @@ async def media_stream(websocket: WebSocket):
         # This commonly happens when the caller hangs up or Twilio
         # closes the connection.
         print("Twilio Media Stream disconnected.")
+
+    finally:
+        # Stop the background OpenAI listener when the Twilio call ends.
+        openai_listener.cancel()
+
+        # Close the OpenAI WebSocket if it is still open.
+        await openai_websocket.close()
+
+        print("OpenAI Realtime connection closed.")
