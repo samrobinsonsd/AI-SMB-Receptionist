@@ -25,3 +25,6 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local application database
+messages.db

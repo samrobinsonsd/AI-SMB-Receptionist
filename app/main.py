@@ -13,6 +13,11 @@ from app.openai_realtime import (
     start_receptionist_greeting,
 )
 
+from app.database import (
+    get_messages,
+    initialize_database,
+    save_message,
+)
 
 # Load environment variables from .env.
 load_dotenv()
@@ -34,6 +39,11 @@ PUBLIC_URL = os.getenv("PUBLIC_URL")
 app = FastAPI(title="AI SMB Receptionist")
 
 
+# Make sure the local SQLite database and required tables exist
+# whenever the FastAPI application starts.
+initialize_database()
+
+
 # Basic health-check endpoint.
 #
 # This gives us a quick way to confirm that the Python application is running
@@ -43,6 +53,26 @@ async def root():
     return {
         "status": "ok",
         "service": "AI SMB Receptionist",
+    }
+
+
+@app.get("/messages")
+async def list_messages():
+    """
+    Return all receptionist messages stored in SQLite.
+
+    This is a simple development endpoint for verifying that caller
+    messages are being persisted correctly.
+
+    Authentication will be added before this is treated as a
+    production-facing administrative endpoint.
+    """
+
+    messages = get_messages()
+
+    return {
+        "count": len(messages),
+        "messages": messages,
     }
 
 
@@ -97,24 +127,43 @@ async def incoming_call():
 
 async def handle_take_message(arguments):
     """
-    Handle structured caller messages submitted by the AI.
+    Store a structured caller message in SQLite.
 
-    For this first version, messages are only written to the console.
-    Later this function can store them in a database, send an email,
-    create a CRM record, or notify staff by SMS.
+    OpenAI provides the message details as structured function-call
+    arguments. Python is responsible for performing the actual business
+    action, which in this case is persisting the message.
     """
 
-    print("\n--- NEW REEFWISE MESSAGE ---")
-    print(f"Name: {arguments.get('name')}")
-    print(f"Phone: {arguments.get('phone')}")
-    print(f"Reason: {arguments.get('reason')}")
-    print(f"Notes: {arguments.get('notes', '')}")
-    print(
-        f"Callback requested: "
-        f"{arguments.get('callback_requested')}"
+    name = arguments.get("name")
+    phone = arguments.get("phone")
+    reason = arguments.get("reason")
+    notes = arguments.get("notes", "")
+    callback_requested = arguments.get(
+        "callback_requested",
+        False,
     )
+
+    # Store the message permanently in SQLite.
+    message_id = save_message(
+        name=name,
+        phone=phone,
+        reason=reason,
+        notes=notes,
+        callback_requested=callback_requested,
+    )
+
+    # Keep the console output for development and debugging.
+    print("\n--- NEW REEFWISE MESSAGE ---")
+    print(f"Message ID: {message_id}")
+    print(f"Name: {name}")
+    print(f"Phone: {phone}")
+    print(f"Reason: {reason}")
+    print(f"Notes: {notes}")
+    print(f"Callback requested: {callback_requested}")
     print("----------------------------\n")
-    
+
+    return message_id
+
     
 @app.websocket("/media-stream")
 async def media_stream(websocket: WebSocket):
