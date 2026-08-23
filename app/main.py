@@ -4,7 +4,7 @@ import os
 
 import websockets
 from dotenv import load_dotenv
-from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse
 
 from app.openai_realtime import (
@@ -17,6 +17,7 @@ from app.database import (
     get_messages,
     initialize_database,
     save_message,
+    update_message_status,
 )
 
 # Load environment variables from .env.
@@ -75,6 +76,50 @@ async def list_messages():
         "messages": messages,
     }
 
+
+@app.patch("/messages/{message_id}/status")
+async def change_message_status(
+    message_id: int,
+    status: str,
+):
+    """
+    Change the workflow status of a caller message.
+
+    Example:
+
+    PATCH /messages/1/status?status=contacted
+
+    Valid statuses:
+    - new
+    - contacted
+    - closed
+    """
+
+    try:
+        updated = update_message_status(
+            message_id=message_id,
+            status=status,
+        )
+
+    except ValueError as exc:
+        # Return HTTP 400 when an unsupported status is requested.
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    if not updated:
+        # Return HTTP 404 if the requested message does not exist.
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found.",
+        )
+
+    return {
+        "success": True,
+        "message_id": message_id,
+        "status": status,
+    }
 
 # Twilio will send an HTTP POST request to this endpoint whenever someone
 # calls our Twilio phone number.

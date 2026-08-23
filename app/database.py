@@ -142,3 +142,44 @@ def get_messages():
         messages.append(message)
 
     return messages
+
+
+def update_message_status(message_id, status):
+    """
+    Update the workflow status of a stored caller message.
+
+    Allowed statuses:
+    - new
+    - contacted
+    - closed
+
+    Returns True if a message was updated, otherwise False.
+    """
+
+    allowed_statuses = {
+        "new",
+        "contacted",
+        "closed",
+    }
+
+    if status not in allowed_statuses:
+        raise ValueError(
+            f"Invalid status: {status}"
+        )
+
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE messages
+            SET status = ?
+            WHERE id = ?
+            """,
+            (
+                status,
+                message_id,
+            ),
+        )
+
+        connection.commit()
+
+        return cursor.rowcount > 0
