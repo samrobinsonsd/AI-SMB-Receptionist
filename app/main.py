@@ -7,7 +7,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse
 
-from app.openai_realtime import connect_to_openai
+from app.openai_realtime import (
+    connect_to_openai,
+    configure_realtime_session,
+)
 
 
 # Load environment variables from .env.
@@ -126,6 +129,10 @@ async def media_stream(websocket: WebSocket):
     #
     # Twilio <-> Python <-> OpenAI
     openai_websocket = await connect_to_openai()
+    
+    # Configure the newly created Realtime session before
+    # caller audio begins flowing to OpenAI.
+    await configure_realtime_session(openai_websocket)
     
     # OpenAI sends events over the WebSocket as JSON messages.
     #
