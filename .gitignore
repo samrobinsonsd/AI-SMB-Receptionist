@@ -28,3 +28,6 @@ Thumbs.db
 
 # Local application database
 messages.db
+
+# Local business configuration
+app/business_config.py
