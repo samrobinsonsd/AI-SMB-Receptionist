@@ -21,7 +21,8 @@ TEXT_INPUT_COST_PER_MILLION = 0.60
 TEXT_OUTPUT_COST_PER_MILLION = 2.40
 AUDIO_INPUT_COST_PER_MILLION = 10.00
 AUDIO_OUTPUT_COST_PER_MILLION = 20.00
-
+CACHED_TEXT_INPUT_COST_PER_MILLION = 0.06
+CACHED_AUDIO_INPUT_COST_PER_MILLION = 0.30
 # Twilio US local inbound voice pricing per minute.
 TWILIO_INBOUND_COST_PER_MINUTE = 0.0085
 
@@ -30,45 +31,77 @@ def calculate_call_cost(call):
     """
     Estimate OpenAI and Twilio cost for one completed call.
 
-    OpenAI's total input/output token counts include their
-    respective audio tokens, so audio tokens are subtracted
-    to derive the remaining text-token usage.
+    Realtime input usage can include cached tokens, which are billed
+    at a lower rate than uncached input tokens.
+
+    Audio tokens are tracked separately from text tokens so each usage
+    type can be priced correctly.
     """
 
     input_tokens = call["input_tokens"] or 0
     output_tokens = call["output_tokens"] or 0
     input_audio_tokens = call["input_audio_tokens"] or 0
     output_audio_tokens = call["output_audio_tokens"] or 0
+    cached_input_tokens = call["cached_input_tokens"] or 0
 
+    # Total input includes both text and audio.
     text_input_tokens = max(
         input_tokens - input_audio_tokens,
         0,
     )
 
+    # Output is handled the same way.
     text_output_tokens = max(
         output_tokens - output_audio_tokens,
         0,
     )
 
+    # Cached tokens are part of the input total, so subtract them
+    # from the normal text-input bucket before applying standard pricing.
+    cached_text_input_tokens = (
+        call["cached_text_input_tokens"] or 0
+    )
+
+    cached_audio_input_tokens = (
+        call["cached_audio_input_tokens"] or 0
+    )
+
+    uncached_text_input_tokens = max(
+        text_input_tokens - cached_text_input_tokens,
+        0,
+    )
+
+    uncached_audio_input_tokens = max(
+        input_audio_tokens - cached_audio_input_tokens,
+        0,
+    )
+
     openai_cost = (
-        text_input_tokens
+        uncached_text_input_tokens
         / 1_000_000
         * TEXT_INPUT_COST_PER_MILLION
+        +
+        cached_text_input_tokens
+        / 1_000_000
+        * CACHED_TEXT_INPUT_COST_PER_MILLION
+        +
+        uncached_audio_input_tokens
+        / 1_000_000
+        * AUDIO_INPUT_COST_PER_MILLION
+        +
+        cached_audio_input_tokens
+        / 1_000_000
+        * CACHED_AUDIO_INPUT_COST_PER_MILLION
         +
         text_output_tokens
         / 1_000_000
         * TEXT_OUTPUT_COST_PER_MILLION
-        +
-        input_audio_tokens
-        / 1_000_000
-        * AUDIO_INPUT_COST_PER_MILLION
         +
         output_audio_tokens
         / 1_000_000
         * AUDIO_OUTPUT_COST_PER_MILLION
     )
 
-    # Twilio rounds voice calls to billing-minute boundaries.
     duration_seconds = call["duration_seconds"] or 0
 
     billed_minutes = max(
@@ -187,7 +220,32 @@ def initialize_database():
                 ALTER TABLE calls
                 ADD COLUMN output_audio_tokens INTEGER NOT NULL DEFAULT 0
                 """
-            )        
+            )
+            
+        if "cached_input_tokens" not in call_columns:
+            connection.execute(
+                """
+                ALTER TABLE calls
+                ADD COLUMN cached_input_tokens INTEGER NOT NULL DEFAULT 0
+                """
+            )
+            
+        if "cached_text_input_tokens" not in call_columns:
+            connection.execute(
+                """
+                ALTER TABLE calls
+                ADD COLUMN cached_text_input_tokens INTEGER NOT NULL DEFAULT 0
+                """
+            )
+
+        if "cached_audio_input_tokens" not in call_columns:
+            connection.execute(
+                """
+                ALTER TABLE calls
+                ADD COLUMN cached_audio_input_tokens INTEGER NOT NULL DEFAULT 0
+                """
+            )
+    
         connection.commit()
 
 
@@ -433,7 +491,10 @@ def get_calls():
                 input_tokens,
                 output_tokens,
                 input_audio_tokens,
-                output_audio_tokens
+                output_audio_tokens,
+                cached_input_tokens,
+                cached_text_input_tokens,
+                cached_audio_input_tokens
             FROM calls
             ORDER BY id DESC
             """
@@ -460,6 +521,9 @@ def add_call_usage(
     output_tokens=0,
     input_audio_tokens=0,
     output_audio_tokens=0,
+    cached_input_tokens=0,
+    cached_text_input_tokens=0,
+    cached_audio_input_tokens=0,
 ):
     """
     Add OpenAI usage from one completed model response to a call.
@@ -476,7 +540,10 @@ def add_call_usage(
                 input_tokens = input_tokens + ?,
                 output_tokens = output_tokens + ?,
                 input_audio_tokens = input_audio_tokens + ?,
-                output_audio_tokens = output_audio_tokens + ?
+                output_audio_tokens = output_audio_tokens + ?,
+                cached_input_tokens = cached_input_tokens + ?,
+                cached_text_input_tokens = cached_text_input_tokens + ?,
+                cached_audio_input_tokens = cached_audio_input_tokens + ?
             WHERE call_sid = ?
             """,
             (
@@ -484,6 +551,9 @@ def add_call_usage(
                 output_tokens,
                 input_audio_tokens,
                 output_audio_tokens,
+                cached_input_tokens,
+                cached_text_input_tokens,
+                cached_audio_input_tokens,
                 call_sid,
             ),
         )

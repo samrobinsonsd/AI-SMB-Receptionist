@@ -9,6 +9,9 @@ from fastapi.responses import HTMLResponse
 from pathlib import Path
 from twilio.twiml.voice_response import VoiceResponse
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from app.openai_realtime import (
     connect_to_openai,
     configure_realtime_session,
@@ -415,13 +418,39 @@ async def media_stream(websocket: WebSocket):
                         "audio_tokens",
                         0,
                     )
+                    
+                    cached_input_tokens = input_details.get(
+                    "cached_tokens",
+                        0,
+                    )
+                    
+                    # Cached input may contain both text and audio tokens.
+                    # Realtime prices cached audio differently from cached text,
+                    # so capture the detailed breakdown when OpenAI provides it.
+                    cached_details = (
+                    input_details.get("cached_tokens_details")
+                    or {}
+                    )
 
+                    cached_text_input_tokens = cached_details.get(
+                    "text_tokens",
+                        0,
+                    )
+
+                    cached_audio_input_tokens = cached_details.get(
+                        "audio_tokens",
+                        0,
+                    )
+                    
                     add_call_usage(
                         call_sid=call_sid,
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,
                         input_audio_tokens=input_audio_tokens,
                         output_audio_tokens=output_audio_tokens,
+                        cached_input_tokens=cached_input_tokens,
+                        cached_text_input_tokens=cached_text_input_tokens,
+                        cached_audio_input_tokens=cached_audio_input_tokens,
                     )
 
                     print(
@@ -430,6 +459,9 @@ async def media_stream(websocket: WebSocket):
                         f"{output_tokens} output tokens, "
                         f"{input_audio_tokens} input audio tokens, "
                         f"{output_audio_tokens} output audio tokens."
+                        f"{cached_input_tokens} cached input tokens."
+                        f"{cached_text_input_tokens} cached text tokens, "
+                        f"{cached_audio_input_tokens} cached audio tokens."
                     )                
                 
                 # OpenAI emits this event when a function/tool call has
