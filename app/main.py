@@ -353,6 +353,12 @@ async def media_stream(websocket: WebSocket):
     # call_sid identifies the actual Twilio phone call.
     stream_sid = None
     call_sid = None
+    
+    # Tracks the primary business outcome of this call.
+    #
+    # The default means the AI handled the conversation without
+    # creating a message or transferring the caller.
+    call_outcome = "completed"
 
     print("Twilio Media Stream connected.")
     
@@ -374,6 +380,9 @@ async def media_stream(websocket: WebSocket):
     # This background task listens for those events while the main
     # function continues listening to Twilio.
     async def receive_openai_events():
+        
+        nonlocal call_outcome
+        
         try:
             async for message in openai_websocket:
                 data = json.loads(message)
@@ -477,6 +486,9 @@ async def media_stream(websocket: WebSocket):
 
                     if tool_name == "take_message":
                         await handle_take_message(arguments)
+                        
+                        # This call resulted in a structured message for staff.
+                        call_outcome = "message"
 
                         # Tell OpenAI that Python successfully executed
                         # the requested tool.
@@ -519,6 +531,9 @@ async def media_stream(websocket: WebSocket):
                             "reason",
                             "No transfer reason provided.",
                         )
+                        
+                        # The AI receptionist handed the active call to staff.
+                        call_outcome = "transferred"
 
                         print("\n--- LIVE CALL TRANSFER ---")
                         print(f"Call SID: {call_sid}")
@@ -679,7 +694,7 @@ async def media_stream(websocket: WebSocket):
                 if call_sid:
                     end_call(
                         call_sid=call_sid,
-                        outcome="completed",
+                        outcome=call_outcome,
                     )
                 break
 
