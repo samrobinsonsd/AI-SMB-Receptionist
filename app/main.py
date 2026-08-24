@@ -112,39 +112,61 @@ async def list_calls():
 @app.get("/stats")
 async def get_stats():
     """
-    Return high-level receptionist usage and cost statistics.
+    Return today's receptionist usage, outcomes, and cost statistics.
 
-    Calls without OpenAI usage data are excluded from cost averages
-    because they were recorded before AI usage tracking was enabled.
+    Reporting uses the business's local Central Time zone so the
+    dashboard resets at the correct local midnight.
+
+    Calls without OpenAI usage data are excluded because they were
+    recorded before detailed AI usage tracking was enabled.
     """
 
     calls = get_calls()
 
-    # Calls that contain OpenAI usage telemetry.
-    measured_calls = [
-        call for call in calls
+    # Reefwise operates in Illinois, so reporting uses Central Time.
+    business_timezone = ZoneInfo("America/Chicago")
+
+    today = datetime.now(
+        business_timezone
+    ).date()
+
+    measured_calls = []
+
+    for call in calls:
+        # Ignore calls that predate OpenAI usage telemetry.
         if (
-            call["input_tokens"] > 0
-            or call["output_tokens"] > 0
+            call["input_tokens"] <= 0
+            and call["output_tokens"] <= 0
+        ):
+            continue
+
+        # Call timestamps are stored in UTC.
+        # Convert each timestamp to Central Time before determining
+        # whether it belongs to today's business day.
+        started_at = datetime.fromisoformat(
+            call["started_at"]
         )
-    ]
+
+        local_started_at = started_at.astimezone(
+            business_timezone
+        )
+
+        if local_started_at.date() == today:
+            measured_calls.append(call)
+
+    # ---------------------------------------------------------
+    # Basic call statistics
+    # ---------------------------------------------------------
+
+    call_count = len(measured_calls)
 
     total_seconds = sum(
         call["duration_seconds"] or 0
         for call in measured_calls
     )
 
-    total_cost = sum(
-        call["estimated_total_cost_usd"]
-        for call in measured_calls
-    )
-
-    call_count = len(measured_calls)
-
-    average_cost = (
-        total_cost / call_count
-        if call_count
-        else 0
+    total_minutes = (
+        total_seconds / 60
     )
 
     average_duration = (
@@ -153,11 +175,72 @@ async def get_stats():
         else 0
     )
 
+    # ---------------------------------------------------------
+    # Cost statistics
+    # ---------------------------------------------------------
+
+    openai_cost = sum(
+        call["openai_cost_usd"]
+        for call in measured_calls
+    )
+
+    twilio_cost = sum(
+        call["twilio_cost_usd"]
+        for call in measured_calls
+    )
+
+    total_cost = sum(
+        call["estimated_total_cost_usd"]
+        for call in measured_calls
+    )
+
+    average_cost = (
+        total_cost / call_count
+        if call_count
+        else 0
+    )
+
+    # ---------------------------------------------------------
+    # Call outcome statistics
+    # ---------------------------------------------------------
+
+    completed_calls = sum(
+        1
+        for call in measured_calls
+        if call["outcome"] == "completed"
+    )
+
+    message_calls = sum(
+        1
+        for call in measured_calls
+        if call["outcome"] == "message"
+    )
+
+    transferred_calls = sum(
+        1
+        for call in measured_calls
+        if call["outcome"] == "transferred"
+    )
+
     return {
+        # Call volume
         "calls": call_count,
         "minutes": round(
-            total_seconds / 60,
+            total_minutes,
             1,
+        ),
+        "average_duration_seconds": round(
+            average_duration,
+        ),
+
+        # Cost
+        "openai_cost_usd": round(
+            openai_cost,
+            4,
+        ),
+        "twilio_cost_usd": round(
+            twilio_cost,
+            4,
         ),
         "total_cost_usd": round(
             total_cost,
@@ -167,9 +250,13 @@ async def get_stats():
             average_cost,
             4,
         ),
-        "average_duration_seconds": round(
-            average_duration,
-        ),
+
+        # Outcomes
+        "completed_calls": completed_calls,
+        "message_calls": message_calls,
+        "transferred_calls": transferred_calls,
+
+        # Project operating-cost target
         "daily_budget_usd": 5.00,
     }
 

@@ -16,7 +16,7 @@
         }
 
         .container {
-            max-width: 900px;
+            max-width: 1100px;
             margin: 0 auto;
         }
 
@@ -24,9 +24,132 @@
             margin-bottom: 5px;
         }
 
+        h2 {
+            margin-top: 35px;
+            margin-bottom: 15px;
+        }
+
         .subtitle {
             color: #aaa;
             margin-bottom: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 18px;
+        }
+
+        .stat-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 18px;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .cost-split {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+            color: #777;
+            font-size: 11px;
+        }
+
+        .outcome-summary {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 25px;
+            color: #bbb;
+            font-size: 14px;
+        }
+
+        .outcome-summary strong {
+            color: #fff;
+        }
+
+        .budget-section {
+            margin-bottom: 30px;
+        }
+
+        .budget-header {
+            display: flex;
+            justify-content: space-between;
+            color: #aaa;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .budget-bar {
+            height: 8px;
+            background: #292929;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .budget-progress {
+            height: 100%;
+            width: 0%;
+            background: #ddd;
+            transition: width 0.3s ease;
+        }
+
+        .recent-calls {
+            margin-bottom: 35px;
+            overflow-x: auto;
+        }
+
+        .recent-calls table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #171717;
+            border: 1px solid #2d2d2d;
+        }
+
+        .recent-calls th,
+        .recent-calls td {
+            padding: 13px 14px;
+            text-align: left;
+            border-bottom: 1px solid #292929;
+        }
+
+        .recent-calls th {
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .recent-calls td {
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .filters {
+            margin-bottom: 20px;
+        }
+
+        .filters button {
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+        }
+
+        .counts {
+            margin-bottom: 25px;
+            color: #aaa;
+            font-size: 14px;
         }
 
         .message-card {
@@ -92,76 +215,14 @@
             color: #999;
         }
 
-        .filters {
-            margin-bottom: 20px;
-        }
-
-        .filters button {
-            background: #222;
-            color: #fff;
-            border: 1px solid #444;
-        }
-
-        .counts {
-            margin-bottom: 25px;
-            color: #aaa;
-            font-size: 14px;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .stat-card {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 10px;
-            padding: 18px;
-        }
-
-        .stat-label {
-            color: #888;
-            font-size: 12px;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-        }
-
-        .budget-section {
-            margin-bottom: 30px;
-        }
-
-        .budget-header {
-            display: flex;
-            justify-content: space-between;
-            color: #aaa;
-            font-size: 13px;
-            margin-bottom: 8px;
-        }
-
-        .budget-bar {
-            height: 8px;
-            background: #292929;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .budget-progress {
-            height: 100%;
-            width: 0%;
-            background: #ddd;
-            transition: width 0.3s ease;
-        }
-
-        @media (max-width: 700px) {
+        @media (max-width: 800px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
+            }
+
+            .outcome-summary {
+                flex-direction: column;
+                gap: 8px;
             }
         }
     </style>
@@ -177,43 +238,77 @@
         AI Receptionist Caller Messages
     </div>
 
-<div class="stats-grid">
+    <div class="stats-grid">
 
-    <div class="stat-card">
-        <div class="stat-label">Calls</div>
-        <div class="stat-value" id="stat-calls">0</div>
+        <div class="stat-card">
+            <div class="stat-label">Calls Today</div>
+            <div class="stat-value" id="stat-calls">0</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Minutes</div>
+            <div class="stat-value" id="stat-minutes">0</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Avg Duration</div>
+            <div class="stat-value" id="stat-duration">0s</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Total Cost</div>
+            <div class="stat-value" id="stat-cost">$0.00</div>
+
+            <div class="cost-split">
+                <span id="stat-openai">OpenAI $0.00</span>
+                <span id="stat-twilio">Twilio $0.00</span>
+            </div>
+        </div>
+
     </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Minutes</div>
-        <div class="stat-value" id="stat-minutes">0</div>
+    <div class="outcome-summary">
+        <span>Completed: <strong id="stat-completed">0</strong></span>
+        <span>Messages: <strong id="stat-messages">0</strong></span>
+        <span>Transferred: <strong id="stat-transferred">0</strong></span>
     </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Total Cost</div>
-        <div class="stat-value" id="stat-cost">$0.00</div>
-    </div>
+    <div class="budget-section">
+        <div class="budget-header">
+            <span>Daily Cost Target</span>
+            <span id="budget-text">$0.00 / $5.00</span>
+        </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Avg Cost / Call</div>
-        <div class="stat-value" id="stat-average">$0.00</div>
-    </div>
-
-</div>
-
-<div class="budget-section">
-    <div class="budget-header">
-        <span>Daily Cost Target</span>
-        <span id="budget-text">$0.00 / $5.00</span>
-    </div>
-
-    <div class="budget-bar">
-        <div
-            class="budget-progress"
-            id="budget-progress">
+        <div class="budget-bar">
+            <div
+                class="budget-progress"
+                id="budget-progress">
+            </div>
         </div>
     </div>
-</div>
+
+    <h2>Recent Calls</h2>
+
+    <div class="recent-calls">
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Duration</th>
+                    <th>Outcome</th>
+                    <th>OpenAI</th>
+                    <th>Twilio</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+
+            <tbody id="recent-calls-body">
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Caller Messages</h2>
+
     <div class="filters">
         <button onclick="setFilter('all')">All</button>
         <button onclick="setFilter('new')">New</button>
@@ -249,7 +344,6 @@
         const container = document.getElementById("messages");
         const countsContainer = document.getElementById("counts");
 
-        // Count messages by workflow status.
         const counts = {
             new: 0,
             contacted: 0,
@@ -267,7 +361,6 @@
             `Contacted: ${counts.contacted} | ` +
             `Closed: ${counts.closed}`;
 
-        // Apply the selected inbox filter.
         const filteredMessages = data.messages.filter(
             message =>
                 currentFilter === "all" ||
@@ -288,8 +381,6 @@
 
             card.className = "message-card";
 
-            // Only show workflow actions that make sense
-            // for the message's current status.
             let actionButtons = "";
 
             if (message.status === "new") {
@@ -376,46 +467,95 @@
     }
 
 
-    // Load the inbox when the page opens.
+    // Load call usage and cost telemetry.
+    async function loadStats() {
+        const response = await fetch("/stats");
+        const stats = await response.json();
+
+        document.getElementById("stat-calls").textContent =
+            stats.calls;
+
+        document.getElementById("stat-minutes").textContent =
+            stats.minutes;
+
+        document.getElementById("stat-duration").textContent =
+            `${stats.average_duration_seconds}s`;
+
+        document.getElementById("stat-cost").textContent =
+            `$${stats.total_cost_usd.toFixed(2)}`;
+
+        document.getElementById("stat-openai").textContent =
+            `OpenAI $${stats.openai_cost_usd.toFixed(2)}`;
+
+        document.getElementById("stat-twilio").textContent =
+            `Twilio $${stats.twilio_cost_usd.toFixed(2)}`;
+
+        document.getElementById("stat-completed").textContent =
+            stats.completed_calls;
+
+        document.getElementById("stat-messages").textContent =
+            stats.message_calls;
+
+        document.getElementById("stat-transferred").textContent =
+            stats.transferred_calls;
+
+        document.getElementById("budget-text").textContent =
+            `$${stats.total_cost_usd.toFixed(2)} / ` +
+            `$${stats.daily_budget_usd.toFixed(2)}`;
+
+        const percentage = Math.min(
+            (
+                stats.total_cost_usd
+                / stats.daily_budget_usd
+            ) * 100,
+            100
+        );
+
+        document.getElementById(
+            "budget-progress"
+        ).style.width = `${percentage}%`;
+    }
+
+
+    // Load the five most recent calls.
+    async function loadRecentCalls() {
+        const response = await fetch("/calls");
+        const data = await response.json();
+
+        const body = document.getElementById(
+            "recent-calls-body"
+        );
+
+        body.innerHTML = "";
+
+        for (const call of data.calls.slice(0, 5)) {
+            const row = document.createElement("tr");
+
+            const started = new Date(
+                call.started_at
+            ).toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+            });
+
+            row.innerHTML = `
+                <td>${started}</td>
+                <td>${call.duration_seconds || 0}s</td>
+                <td>${call.outcome}</td>
+                <td>$${call.openai_cost_usd.toFixed(3)}</td>
+                <td>$${call.twilio_cost_usd.toFixed(3)}</td>
+                <td>$${call.estimated_total_cost_usd.toFixed(3)}</td>
+            `;
+
+            body.appendChild(row);
+        }
+    }
+
+
+    // Load dashboard data when the page opens.
     loadMessages();
     loadStats();
-
-
-// Load call usage and cost telemetry from FastAPI.
-async function loadStats() {
-    const response = await fetch("/stats");
-    const stats = await response.json();
-
-    document.getElementById("stat-calls").textContent =
-        stats.calls;
-
-    document.getElementById("stat-minutes").textContent =
-        stats.minutes;
-
-    document.getElementById("stat-cost").textContent =
-        `$${stats.total_cost_usd.toFixed(2)}`;
-
-    document.getElementById("stat-average").textContent =
-        `$${stats.average_cost_usd.toFixed(2)}`;
-
-    document.getElementById("budget-text").textContent =
-        `$${stats.total_cost_usd.toFixed(2)} / ` +
-        `$${stats.daily_budget_usd.toFixed(2)}`;
-
-    // Convert current spending into a percentage of
-    // the configured daily budget.
-    const percentage = Math.min(
-        (
-            stats.total_cost_usd
-            / stats.daily_budget_usd
-        ) * 100,
-        100
-    );
-
-    document.getElementById(
-        "budget-progress"
-    ).style.width = `${percentage}%`;
-}
+    loadRecentCalls();
 </script>
 
 </body>

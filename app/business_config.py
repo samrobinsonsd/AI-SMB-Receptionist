@@ -43,6 +43,49 @@ BUSINESS_CONFIG = {
         "Marine life",
         "Aquascaping",
     ],
+    
+# Confirmed services, products, and business capabilities.
+#
+# These are static facts the receptionist may answer directly.
+"knowledge": {
+    "services": [
+        "RO/DI water",
+        "Prepared saltwater",
+        "Aquarium maintenance",
+        "ICP testing",
+        "House calls",
+        "Aquarium tear-downs",
+        "Aquascaping",
+        "Aquarium builds",
+        "Custom aquarium work",
+    ],
+
+    "livestock": [
+        "Saltwater fish",
+        "Coral Frags",
+        "Coral Colonies",
+        "Invertebrates",
+        "Cleanup Crew",
+    ],
+
+    "livestock_practices": [
+        "All fish are quarantined prior to sale",
+    ],
+
+    "products": [
+        "Aquarium salts",
+        "Water additives",
+        "Frozen fish food",
+        "Dry fish food",
+        "Aquarium lights",
+        "Pumps",
+        "Protein skimmers",
+        "Automatic feeders and top-offs",
+        "New aquariums",
+        "Used aquariums",
+        "Aquarium equipment",
+    ],
+},
 
     # Information that must not be guessed.
     #

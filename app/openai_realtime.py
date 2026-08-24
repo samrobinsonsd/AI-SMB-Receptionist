@@ -71,6 +71,27 @@ def build_business_context():
     specialties = ", ".join(
         BUSINESS_CONFIG["specialties"]
     )
+    
+    knowledge = BUSINESS_CONFIG.get(
+    "knowledge",
+    {},
+    )
+
+    services = ", ".join(
+        knowledge.get("services", [])
+    )
+
+    livestock = ", ".join(
+        knowledge.get("livestock", [])
+    )
+
+    livestock_practices = ", ".join(
+        knowledge.get("livestock_practices", [])
+    )
+
+    products = ", ".join(
+        knowledge.get("products", [])
+    )
 
     return (
         f"Business name: {BUSINESS_CONFIG['name']}\n"
@@ -78,6 +99,10 @@ def build_business_context():
         f"Address: {BUSINESS_CONFIG['address']}\n"
         f"Phone: {BUSINESS_CONFIG['phone']}\n"
         f"Specialties: {specialties}\n"
+        f"Services: {services}\n"
+        f"Livestock sold: {livestock}\n"
+        f"Livestock practices: {livestock_practices}\n"
+        f"Products sold: {products}\n"
         f"Store hours:\n{hours}"
     )
     
@@ -102,6 +127,7 @@ async def configure_realtime_session(openai_websocket):
     
     # Build the static business knowledge supplied to the receptionist.
     business_context = build_business_context()
+    
 
     session_update = {
         "type": "session.update",
@@ -177,6 +203,9 @@ async def configure_realtime_session(openai_websocket):
                 "with a member of the team.\n"
                 "- After saying that, immediately use transfer_to_staff.\n"
                 "- Do not continue speaking after requesting the transfer.\n"
+                "- Answer questions about products and services using the provided business information.\n"
+                "- General product categories may be confirmed, but never claim a specific item is currently in stock unless live inventory is available.\n"
+                "- You may state that all fish are quarantined prior to sale.\n"
             ),
             
             "tools": [
